@@ -1,0 +1,28 @@
+{
+  "provider": "NASA GES DISC / Giovanni",
+  "version": "5.12.4",
+  "source_origin": "https://giovanni.gsfc.nasa.gov",
+  "source_path": "/giovanni/",
+  "service": "ArAvTs",
+  "shape_id": "state_dept_countries_2017/shp_85",
+  "selection_bbox": [
+    -16.8296,
+    13.0839,
+    -13.8084,
+    13.82
+  ],
+  "data_bbox": null,
+  "empty_url_fields": 0,
+  "region": "The Gambia (Giovanni country shape, as specified by source export)",
+  "start": "1991-01-01",
+  "end": "2025-12-01",
+  "fill_value": 999999986991104,
+  "variable": "PS",
+  "collection": "M2TMNXSLV",
+  "product_native_units": "Pa",
+  "exported_units": "hPa",
+  "source_sha256": "e71b283c2a848ac1b201b512f612468d839c7cac9f2d40f8c91259ea78b862e0",
+  "dataset_id": "giovanni-merra2-gambia-country-ps-1991-2025-v1",
+  "filename": "giovanni_merra2_gambia_ps_1991_2025.csv",
+  "units_basis": "Technical Lead approved exported values as hPa; CSV has no explicit units field. Native product Pa per NASA specification (https://gmao.gsfc.nasa.gov/media/publications/zbly36ziNFDFbmYmvhQeVqPhUo/Bosilovich785.pdf); no Pa-to-hPa conversion applied to this export."
+}

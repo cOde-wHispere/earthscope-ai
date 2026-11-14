@@ -1,0 +1,23 @@
+{
+  "provider": "NASA GES DISC / Giovanni",
+  "version": "5.12.4",
+  "source_origin": "https://giovanni.gsfc.nasa.gov",
+  "source_path": "/giovanni/",
+  "service": "ArAvTs",
+  "shape_id": "state_dept_countries_2017/shp_85",
+  "selection_bbox": null,
+  "data_bbox": null,
+  "empty_url_fields": 1,
+  "region": "The Gambia (Giovanni country shape, as specified by source export)",
+  "start": "1991-01-01",
+  "end": "2025-12-01",
+  "fill_value": 1000000000000000,
+  "variable": "PRECTOTCORR",
+  "collection": "M2TMNXFLX",
+  "product_native_units": "kg m-2 s-1",
+  "exported_units": "kg m-2 s-1",
+  "source_sha256": "1ac9ec55d13116f88606037303c9f8bb9d60806620d54a41999e11956781be23",
+  "dataset_id": "giovanni-merra2-gambia-country-prectotcorr-1991-2025-v1",
+  "filename": "giovanni_merra2_gambia_prectotcorr_1991_2025.csv",
+  "units_basis": "NASA product specification (https://gmao.gsfc.nasa.gov/media/publications/zbly36ziNFDFbmYmvhQeVqPhUo/Bosilovich785.pdf); CSV has no explicit units field."
+}

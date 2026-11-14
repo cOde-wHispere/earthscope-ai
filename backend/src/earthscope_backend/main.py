@@ -1,4 +1,4 @@
-"""Read-only API over one validated snapshot loaded at application startup."""
+"""Approved temperature API plus independent read-only descriptive dataset snapshots."""
 
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -16,6 +16,7 @@ from earthscope_backend.analysis import (
     estimate_trend,
     monthly_series,
 )
+from earthscope_backend.dataset_registry import load_registry, v2_data_directory
 from earthscope_backend.identity import (
     DatasetIdentity,
     load_baseline_identity,
@@ -35,6 +36,7 @@ from earthscope_backend.schemas import (
     MonthlyResponse,
     TrendResponse,
 )
+from earthscope_backend.v2 import router as v2_router
 
 
 class ServiceError(Exception):
@@ -42,7 +44,12 @@ class ServiceError(Exception):
         self.error = error
 
 
-def create_app(path: Path | None = None, *, identity: DatasetIdentity | None = None) -> FastAPI:
+def create_app(
+    path: Path | None = None,
+    *,
+    identity: DatasetIdentity | None = None,
+    v2_directory: Path | None = None,
+) -> FastAPI:
     source_path = path if path is not None else config.data_path()
 
     @asynccontextmanager
@@ -75,6 +82,11 @@ def create_app(path: Path | None = None, *, identity: DatasetIdentity | None = N
                 message="Source validation failed. Correct the listed source issues and restart.",
                 validation=exc.summary,
             )
+        app.state.dataset_registry = load_registry(
+            v2_directory if v2_directory is not None else v2_data_directory(),
+            app.state.dataset,
+            app.state.error,
+        )
         yield
 
     app = FastAPI(title="EarthScope AI Scientific Backend", version="0.1.0", lifespan=lifespan)
@@ -131,6 +143,7 @@ def create_app(path: Path | None = None, *, identity: DatasetIdentity | None = N
             raise ServiceError(request.app.state.trend_error)
         return request.app.state.trend
 
+    app.include_router(v2_router)
     return app
 
 

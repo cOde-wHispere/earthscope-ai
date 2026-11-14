@@ -2,7 +2,9 @@
 
 Python **3.13** and FastAPI. Serves one local Giovanni MERRA-2 T2M export for The Gambia,
 January 1991–December 2025. The application reads the source without changing it and makes
-no network requests.
+no network requests. The additive `/v2` API also serves five independently validated
+environmental exports. See [multi-variable API, methods and deployment](../docs/multivariable-api.md)
+for all six datasets, unit conversions, failure isolation and verification commands.
 
 From the repository root, in PowerShell, with Python 3.13 installed:
 
