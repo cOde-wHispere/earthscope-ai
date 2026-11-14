@@ -1,6 +1,6 @@
-# EarthScope AI
+ï»¿# EarthScope AI
 
-Team CO2 — NASA Space Apps Challenge 2026
+Team CO2 ï¿½ NASA Space Apps Challenge 2026
 
 Challenge: Be An Earth System Trend Detective!
 
