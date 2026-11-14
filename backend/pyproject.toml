@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=80,<83"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "earthscope-backend"
+version = "0.1.0"
+description = "Validated Giovanni MERRA-2 temperature analysis for EarthScope AI"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi>=0.115.12,<1",
+    "uvicorn>=0.34.2,<1",
+    "pydantic>=2.11.4,<3",
+    "numpy>=2.2.5,<3",
+    "scipy>=1.15.3,<2",
+    "statsmodels>=0.14.4,<0.16",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3.5,<10", "httpx>=0.28.1,<1", "ruff>=0.11.9,<1"]
+
+[project.scripts]
+earthscope-import = "earthscope_backend.importer:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+earthscope_backend = ["manifests/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = ["integration: requires the local ignored NASA CSV; fails if absent"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

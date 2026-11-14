@@ -16,3 +16,7 @@ data/processed/
 *.py[cod]
 .coverage
 htmlcov/
+*.egg-info/
+
+# Workspace-local Python runtime (development only)
+backend/.python-runtime/
