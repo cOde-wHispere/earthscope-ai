@@ -46,17 +46,17 @@ test("real API values, interactive views, accessible layout and keyboard control
   const climatology = climatologySchema.parse(
     await (await request.get("http://127.0.0.1:8000/climatology")).json(),
   );
-  // Hold only API requests so loading can be verified before releasing them to
-  // the real FastAPI service. Do not intercept Vite's /src/api/ modules.
+  // Hold discovery to verify loading, then let data requests reach FastAPI
+  // directly. Routing the entire request group adds unnecessary browser IPC.
   let releaseRequests!: () => void;
   const requestsHeld = new Promise<void>((resolve) => {
     releaseRequests = resolve;
   });
-  await page.route("http://127.0.0.1:5173/api/**", async (route) => {
+  await page.route("http://127.0.0.1:5173/api/v2/datasets", async (route) => {
     await requestsHeld;
     await route.continue();
   });
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(
     page.getByRole("heading", { name: "Loading the scientific record" }),
   ).toBeVisible();
@@ -208,11 +208,11 @@ test("real API values, interactive views, accessible layout and keyboard control
   expect(consoleErrors).toEqual([]);
   await page.getByRole("link", { name: "Overview", exact: true }).click();
   await page.screenshot({
-    path: `test-results/dashboard-${testInfo.project.name}.png`,
+    path: testInfo.outputPath("dashboard.png"),
     fullPage: true,
   });
   await page.screenshot({
-    path: `test-results/dashboard-${testInfo.project.name}-overview.png`,
+    path: testInfo.outputPath("dashboard-overview.png"),
   });
 });
 
@@ -260,7 +260,7 @@ test("narrow layout and missing source show usable errors without scientific cha
   );
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Source metadata unavailable" }),
+    page.getByRole("heading", { name: "Dataset availability unavailable" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Reload data" })).toBeEnabled();
   await expect(

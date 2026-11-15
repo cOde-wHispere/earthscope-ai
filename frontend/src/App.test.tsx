@@ -1,5 +1,6 @@
 import {
   fireEvent,
+  act,
   render,
   screen,
   waitFor,
@@ -15,6 +16,8 @@ import {
   monthly,
   respond,
   trend,
+  variableFixtures,
+  catalog,
 } from "./test/fixtures";
 
 afterEach(() => {
@@ -22,6 +25,21 @@ afterEach(() => {
   window.location.hash = "";
 });
 describe("scientific dashboard", () => {
+  it("keeps the record visible when the active dataset is reselected", async () => {
+    const fetch = vi.fn(respond());
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    await screen.findByText("no statistically significant trend detected.");
+    const count = fetch.mock.calls.length;
+    fireEvent.change(screen.getByLabelText("NASA Giovanni dataset"), {
+      target: { value: "T2M" },
+    });
+    expect(
+      screen.getByRole("img", { name: /^Monthly air temperature / }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reload data" })).toBeEnabled();
+    expect(fetch).toHaveBeenCalledTimes(count);
+  });
   it("shows loading before the service responds", () => {
     vi.stubGlobal(
       "fetch",
@@ -132,6 +150,10 @@ describe("scientific dashboard", () => {
       vi.fn(
         respond({
           "/timeseries/monthly": { ...monthly, observations: [] },
+          "/v2/datasets/T2M/timeseries/monthly": {
+            ...variableFixtures("T2M").monthly,
+            observations: [],
+          },
           "/timeseries/annual": { ...annual, observations: [] },
           "/climatology": { ...climatology, observations: [] },
         }),
@@ -152,7 +174,7 @@ describe("scientific dashboard", () => {
     render(<App />);
     expect(
       await screen.findByRole("heading", {
-        name: "Source metadata unavailable",
+        name: "Dataset availability unavailable",
       }),
     ).toBeVisible();
     expect(
@@ -193,5 +215,160 @@ describe("scientific dashboard", () => {
       ),
     ).toBeVisible();
     expect(screen.getByText("1.23e-12")).toBeVisible();
+  });
+  it.each([
+    ["PRECTOTCORR", "mm/month", "mm/year"],
+    ["QV2M", "g/kg", "g/kg"],
+    ["U10M", "m/s", "m/s"],
+    ["V10M", "m/s", "m/s"],
+    ["PS", "hPa", "hPa"],
+  ])(
+    "shows %s with correct units and descriptive methods only",
+    async (id, monthlyUnit, annualUnit) => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", vi.fn(respond()));
+      render(<App />);
+      await screen.findByText("no statistically significant trend detected.");
+      await user.selectOptions(
+        screen.getByLabelText("NASA Giovanni dataset"),
+        id,
+      );
+      const record = await screen.findByRole("region", {
+        name: "The long view",
+      });
+      expect(within(record).getAllByText(monthlyUnit).length).toBeGreaterThan(
+        0,
+      );
+      expect(
+        screen.queryByText("no statistically significant trend detected."),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: "Full-record trend" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Anomalies" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          /confidence interval|p-value|Significance threshold/i,
+        ),
+      ).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Annual" }));
+      expect(within(record).getAllByText(annualUnit).length).toBeGreaterThan(0);
+      expect(
+        within(record).getByText(/complete-year aggregates/),
+      ).toBeVisible();
+      await user.selectOptions(
+        screen.getByLabelText("NASA Giovanni dataset"),
+        "T2M",
+      );
+      expect(
+        await screen.findByText("no statistically significant trend detected."),
+      ).toBeVisible();
+      expect(screen.getByRole("button", { name: "Anomalies" })).toBeVisible();
+    },
+  );
+  it("disables unavailable variables and explains the backend failure", async () => {
+    const partial = {
+      datasets: catalog.datasets.map((item) =>
+        item.id === "PS"
+          ? {
+              ...item,
+              status: "missing",
+              error: {
+                code: "dataset_missing",
+                message: "Approved pressure file missing.",
+              },
+            }
+          : item,
+      ),
+    };
+    vi.stubGlobal("fetch", vi.fn(respond({ "/v2/datasets": partial })));
+    render(<App />);
+    await screen.findByText("no statistically significant trend detected.");
+    expect(screen.getByRole("option", { name: /PS.*missing/ })).toBeDisabled();
+    expect(screen.getByText("Approved pressure file missing.")).toBeVisible();
+    expect(screen.getByText(/5 of 6 datasets available/)).toBeVisible();
+  });
+  it("allows a healthy variable when temperature is unavailable", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        respond({
+          "/v2/datasets": {
+            datasets: catalog.datasets.map((item) =>
+              item.id === "T2M"
+                ? {
+                    ...item,
+                    status: "invalid",
+                    error: {
+                      code: "dataset_invalid",
+                      message: "T2M identity rejected.",
+                    },
+                  }
+                : item,
+            ),
+          },
+        }),
+      ),
+    );
+    render(<App />);
+    await screen.findByText("T2M identity rejected.", {
+      selector: ".error-state p",
+    });
+    await user.selectOptions(
+      screen.getByLabelText("NASA Giovanni dataset"),
+      "PS",
+    );
+    expect(
+      await screen.findByRole("img", { name: /^Monthly surface pressure / }),
+    ).toBeVisible();
+  });
+  it("aborts selection requests and discards late responses even when transport ignores abort", async () => {
+    const user = userEvent.setup();
+    const success = respond();
+    let release!: (response: Response) => void;
+    let staleSignal: AbortSignal | null | undefined;
+    const fetch = vi.fn((url: string, options: RequestInit) => {
+      if (url.endsWith("QV2M/timeseries/monthly")) {
+        staleSignal = options.signal;
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      }
+      return success(url);
+    });
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    await screen.findByText("no statistically significant trend detected.");
+    await user.selectOptions(
+      screen.getByLabelText("NASA Giovanni dataset"),
+      "QV2M",
+    );
+    expect(
+      screen.queryByRole("img", { name: /^Monthly air temperature / }),
+    ).not.toBeInTheDocument();
+    await waitFor(() => expect(release).toBeDefined());
+    await user.selectOptions(
+      screen.getByLabelText("NASA Giovanni dataset"),
+      "PS",
+    );
+    expect(
+      await screen.findByRole("img", { name: /^Monthly surface pressure / }),
+    ).toBeVisible();
+    expect(staleSignal?.aborted).toBe(true);
+    await act(async () => {
+      release(Response.json(variableFixtures("QV2M").monthly));
+    });
+    expect(
+      screen.getByRole("img", { name: /^Monthly surface pressure / }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("img", { name: /Monthly 2-meter specific humidity/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("synthetic-PS", { selector: "code" }),
+    ).toBeVisible();
   });
 });

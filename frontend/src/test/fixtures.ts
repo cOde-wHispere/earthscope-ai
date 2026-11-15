@@ -7,6 +7,18 @@ import type {
   Monthly,
   Trend,
 } from "../api/schemas";
+import {
+  expectedAggregation,
+  expectedUnits,
+  variables,
+} from "../api/variableSchemas";
+import type {
+  Catalog,
+  Variable,
+  VariableMetadata,
+  VariableMonthly,
+  VariableAnnual,
+} from "../api/variableSchemas";
 
 export const hash = "a".repeat(64);
 export const metadata: Metadata = {
@@ -118,7 +130,143 @@ export const health: Health = {
   dataset_status: "ready",
   error: null,
 };
+const labels = [
+  "2-meter air temperature",
+  "Bias-corrected total precipitation",
+  "2-meter specific humidity",
+  "10-meter eastward wind component",
+  "10-meter northward wind component",
+  "Surface pressure",
+];
+export const catalog: Catalog = {
+  datasets: variables.map((id, index) => ({
+    id,
+    dataset_id: `synthetic-${id}`,
+    label: labels[index],
+    status: "ready",
+    expected_source_sha256: hash,
+    monthly_units: expectedUnits[id][0],
+    annual_units: expectedUnits[id][1],
+    metadata_url: `/v2/datasets/${id}/metadata`,
+    monthly_url: `/v2/datasets/${id}/timeseries/monthly`,
+    annual_url: `/v2/datasets/${id}/timeseries/annual`,
+    statistical_inference: "Not provided by /v2",
+    approved_legacy_trend_url: id === "T2M" ? "/trend" : null,
+    error: null,
+  })),
+};
+export function variableFixtures(id: Variable) {
+  const item = catalog.datasets.find((value) => value.id === id)!;
+  const exportedUnits = {
+    T2M: "K",
+    PRECTOTCORR: "kg m-2 s-1",
+    QV2M: "kg/kg",
+    U10M: "m/s",
+    V10M: "m/s",
+    PS: "hPa",
+  }[id];
+  const method =
+    id === "T2M"
+      ? annual.method
+      : id === "PRECTOTCORR"
+        ? "Sum of 12 monthly water-equivalent precipitation totals; no annual averaging"
+        : "Sum(monthly mean * calendar days) / days in complete year";
+  const conversion =
+    id === "T2M" ? metadata.conversion : `Synthetic ${id} conversion`;
+  const meta: VariableMetadata = {
+    dataset_id: item.dataset_id!,
+    variable: id,
+    label: item.label,
+    identity: {
+      dataset_id: item.dataset_id!,
+      filename: "synthetic-test.csv",
+      provider: "Synthetic test fixture",
+      collection: "M2IMNXASM",
+      version: "5.12.4",
+      variable: id,
+      product_native_units: exportedUnits,
+      exported_units: exportedUnits,
+      units_basis: "Synthetic units",
+      source_origin: "https://giovanni.gsfc.nasa.gov",
+      source_path: "/giovanni/",
+      service: "ArAvTs",
+      shape_id: "synthetic-shape",
+      selection_bbox: null,
+      data_bbox: null,
+      empty_url_fields: 0,
+      region: "The Gambia (synthetic test fixture)",
+      start: "1991-01-01",
+      end: "1992-12-01",
+      source_sha256: hash,
+      fill_value: 1e15,
+    },
+    source_name: metadata.source_name,
+    source_sha256: hash,
+    frequency: "monthly",
+    product_native_units: exportedUnits,
+    exported_units: exportedUnits,
+    monthly_units: item.monthly_units,
+    annual_units: item.annual_units,
+    units_basis: "Synthetic units",
+    conversion,
+    annual_aggregation: expectedAggregation(id),
+    annual_method: method,
+    value_column: `synthetic-${id}`,
+    fill_value: 1e15,
+    validation_screen: "Synthetic test screen",
+    raw_preamble: metadata.raw_preamble,
+    source_metadata: metadata.source_metadata,
+    validation: metadata.validation,
+    limitations: ["Synthetic fixture, not NASA observations"],
+    statistical_inference: "Not provided by /v2",
+  };
+  const months: VariableMonthly = {
+    dataset_id: item.dataset_id!,
+    variable: id,
+    source_sha256: hash,
+    units: item.monthly_units,
+    source_units: exportedUnits,
+    conversion,
+    observations: monthly.observations.map((p, index) => ({
+      time: p.time,
+      source_value: p.temperature_kelvin,
+      value:
+        id === "T2M"
+          ? p.temperature_celsius
+          : id === "U10M" || id === "V10M"
+            ? (index % 3) - 1
+            : index + 1,
+      days_in_month: 31,
+    })),
+  };
+  const years: VariableAnnual = {
+    dataset_id: item.dataset_id!,
+    variable: id,
+    source_sha256: hash,
+    units: item.annual_units,
+    aggregation: expectedAggregation(id),
+    method,
+    observations: annual.observations.map((p) => ({
+      year: p.year,
+      value: p.mean_celsius,
+      months: 12,
+    })),
+  };
+  return { metadata: meta, monthly: months, annual: years };
+}
+const variableResponses = Object.fromEntries(
+  variables.flatMap((id) => {
+    const fixture = variableFixtures(id);
+    return [
+      [`/v2/datasets/${id}/metadata`, fixture.metadata],
+      [`/v2/datasets/${id}/timeseries/monthly`, fixture.monthly],
+      [`/v2/datasets/${id}/timeseries/annual`, fixture.annual],
+    ];
+  }),
+);
 export const responses: Record<string, unknown> = {
+  ...variableResponses,
+  "/v2/datasets": catalog,
   "/health": health,
   "/metadata": metadata,
   "/timeseries/monthly": monthly,

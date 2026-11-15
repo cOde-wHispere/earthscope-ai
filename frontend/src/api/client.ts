@@ -108,7 +108,7 @@ export async function request<T>(
   }
 }
 
-async function resource<T>(promise: Promise<T>): Promise<Resource<T>> {
+export async function resource<T>(promise: Promise<T>): Promise<Resource<T>> {
   try {
     return { status: "ready", data: await promise };
   } catch (error) {

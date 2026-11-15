@@ -14,12 +14,16 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
-import { ApiError, loadDashboard } from "./api/client";
-import type { DashboardData } from "./api/client";
+import { ApiError } from "./api/client";
+import { loadCatalog, loadVariableDashboard } from "./api/variables";
+import type { VariableDashboard } from "./api/variables";
+import { variables } from "./api/variableSchemas";
+import type { Catalog, Variable } from "./api/variableSchemas";
 import { Applications } from "./components/Applications";
 import { RecordExplorer, SeasonalContext } from "./components/RecordExplorer";
 import {
   Methodology,
+  DescriptiveMethodology,
   ProvenancePanel,
   TrendPanel,
 } from "./components/SciencePanels";
@@ -28,11 +32,11 @@ import { monthLabel } from "./lib/format";
 
 type State =
   | { status: "loading" }
-  | { status: "ready"; data: DashboardData }
+  | { status: "ready"; data: VariableDashboard }
   | { status: "error"; error: ApiError };
 const nav = [
   { href: "#overview", icon: Compass, label: "Overview" },
-  { href: "#record", icon: ChartNoAxesCombined, label: "Temperature record" },
+  { href: "#record", icon: ChartNoAxesCombined, label: "Environmental record" },
   { href: "#provenance", icon: Database, label: "Source & provenance" },
   { href: "#methodology", icon: FlaskConical, label: "Methodology" },
   { href: "#applications", icon: Layers3, label: "Applications" },
@@ -41,12 +45,37 @@ const nav = [
 export default function App() {
   const [state, setState] = useState<State>({ status: "loading" });
   const [reload, setReload] = useState(0);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [selected, setSelected] = useState<Variable>("T2M");
   const [active, setActive] = useState(window.location.hash || "#overview");
   const controllerRef = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController();
+    loadCatalog(controller.signal)
+      .then((value) => {
+        if (!controller.signal.aborted) setCatalog(value);
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted)
+          setState({
+            status: "error",
+            error:
+              error instanceof ApiError
+                ? error
+                : new ApiError(
+                    "load_failed",
+                    "Dataset availability could not be loaded.",
+                  ),
+          });
+      });
+    return () => controller.abort();
+  }, [reload]);
+  useEffect(() => {
+    if (!catalog) return;
+    const controller = new AbortController();
     controllerRef.current = controller;
-    loadDashboard(controller.signal)
+    const item = catalog.datasets.find((entry) => entry.id === selected)!;
+    loadVariableDashboard(item, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) setState({ status: "ready", data });
       })
@@ -64,7 +93,7 @@ export default function App() {
           });
       });
     return () => controller.abort();
-  }, [reload]);
+  }, [catalog, selected]);
   useEffect(() => {
     const sync = () => setActive(window.location.hash || "#overview");
     window.addEventListener("hashchange", sync);
@@ -72,16 +101,19 @@ export default function App() {
   }, []);
   const retry = () => {
     controllerRef.current?.abort();
+    setCatalog(null);
     setState({ status: "loading" });
     setReload((value) => value + 1);
   };
-  const data = state.status === "ready" ? state.data : null;
+  const data =
+    state.status === "ready" && state.data.item.id === selected
+      ? state.data
+      : null;
+  const temperature = data?.temperature;
+  const selectedItem = catalog?.datasets.find((item) => item.id === selected);
   const metadata =
     data?.metadata.status === "ready" ? data.metadata.data : null;
-  const sourceHealthy =
-    metadata !== null &&
-    data?.health.status === "ready" &&
-    data.health.data.dataset_status === "ready";
+  const sourceHealthy = metadata !== null && selectedItem?.status === "ready";
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
@@ -170,6 +202,60 @@ export default function App() {
                 {state.status === "loading" ? "Loading" : "Reload data"}
               </button>
             </div>
+            <div className="dataset-selector">
+              <label htmlFor="dataset">NASA Giovanni dataset</label>
+              <select
+                id="dataset"
+                value={selected}
+                disabled={!catalog}
+                aria-describedby="dataset-availability"
+                onChange={(event) => {
+                  const next = event.target.value as Variable;
+                  if (next === selected) return;
+                  controllerRef.current?.abort();
+                  setState({ status: "loading" });
+                  setSelected(next);
+                }}
+              >
+                {variables.map((id) => {
+                  const item = catalog?.datasets.find(
+                    (entry) => entry.id === id,
+                  );
+                  return (
+                    <option
+                      key={id}
+                      value={id}
+                      disabled={!item || item.status !== "ready"}
+                    >
+                      {id}
+                      {item
+                        ? ` · ${item.label}${item.status === "ready" ? "" : ` (${item.status})`}`
+                        : " · checking availability"}
+                    </option>
+                  );
+                })}
+              </select>
+              <p id="dataset-availability" className="muted" role="status">
+                {catalog
+                  ? `${catalog.datasets.filter((item) => item.status === "ready").length} of 6 datasets available. Selected: ${selected}.`
+                  : "Checking dataset availability with the scientific service."}
+              </p>
+              {catalog?.datasets.some((item) => item.status !== "ready") && (
+                <ul className="availability-notes">
+                  {catalog.datasets
+                    .filter((item) => item.status !== "ready")
+                    .map((item) => (
+                      <li key={item.id}>
+                        <strong>
+                          {item.id}: {item.status}.
+                        </strong>{" "}
+                        {item.error?.message ||
+                          "Approved source unavailable. Restore the backend source and reload."}
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
             <div className="study-card">
               <div className="study-content">
                 <span className="study-label">
@@ -178,7 +264,9 @@ export default function App() {
                 <h2>
                   The Gambia<span>West Africa</span>
                 </h2>
-                <p>Country-shape area average · 2-meter air temperature</p>
+                <p>
+                  Country-shape area average · {selectedItem?.label || selected}
+                </p>
                 <div className="study-tags">
                   <span>MERRA-2 reanalysis</span>
                   <span>
@@ -222,7 +310,7 @@ export default function App() {
                     THE GAMBIA
                   </text>
                 </svg>
-                <span>EARTH SYSTEMS / AIR TEMPERATURE</span>
+                <span>EARTH SYSTEMS / {selected}</span>
               </div>
             </div>
             <div className="dataset-strip">
@@ -241,43 +329,62 @@ export default function App() {
               <span>
                 <ShieldCheck size={14} /> Read-only scientific results
               </span>
-              <span>Scope: The Gambia · T2M only</span>
+              <span>Scope: The Gambia · {selected}</span>
             </div>
           </section>
           {state.status === "loading" && <LoadingState />}
-          {state.status === "error" && <ErrorState error={state.error} />}
+          {state.status === "error" && (
+            <ErrorState
+              error={state.error}
+              title={
+                !catalog
+                  ? "Dataset availability unavailable"
+                  : "Dataset unavailable"
+              }
+            />
+          )}
           {data && (
             <>
-              {data.health.status === "error" ? (
-                <div className="service-warning">
-                  <ErrorState
-                    error={data.health.error}
-                    title="Service health could not be checked"
-                  />
-                </div>
-              ) : (
-                data.health.data.status === "degraded" && (
-                  <div className="service-warning" role="status">
-                    <strong>
-                      Scientific service:{" "}
-                      {data.health.data.dataset_status.replaceAll("_", " ")}
-                    </strong>
-                    <p>
-                      {data.health.data.error?.message ||
-                        "Some scientific outputs are unavailable."}{" "}
-                      Available, source-matched results remain visible below.
-                    </p>
+              {temperature &&
+                (temperature.health.status === "error" ? (
+                  <div className="service-warning">
+                    <ErrorState
+                      error={temperature.health.error}
+                      title="Service health could not be checked"
+                    />
                   </div>
-                )
+                ) : (
+                  temperature.health.data.status === "degraded" && (
+                    <div className="service-warning" role="status">
+                      <strong>
+                        Scientific service:{" "}
+                        {temperature.health.data.dataset_status.replaceAll(
+                          "_",
+                          " ",
+                        )}
+                      </strong>
+                      <p>
+                        {temperature.health.data.error?.message ||
+                          "Some scientific outputs are unavailable."}{" "}
+                        Available, source-matched results remain visible below.
+                      </p>
+                    </div>
+                  )
+                ))}
+              {temperature && <TrendPanel resource={temperature.trend} />}
+              <RecordExplorer key={selected} data={data} />
+              {temperature && (
+                <SeasonalContext
+                  monthly={temperature.monthly}
+                  climatology={temperature.climatology}
+                />
               )}
-              <TrendPanel resource={data.trend} />
-              <RecordExplorer monthly={data.monthly} annual={data.annual} />
-              <SeasonalContext
-                monthly={data.monthly}
-                climatology={data.climatology}
-              />
               <ProvenancePanel data={data} />
-              <Methodology data={data} />
+              {temperature ? (
+                <Methodology data={temperature} />
+              ) : (
+                <DescriptiveMethodology data={data} />
+              )}
             </>
           )}
           {!data && (
@@ -285,10 +392,9 @@ export default function App() {
               <p className="eyebrow">Scientific scope</p>
               <h2>Evidence before interpretation</h2>
               <p>
-                This MVP presents one validated NASA Giovanni MERRA-2
-                air-temperature export for The Gambia. Scientific results
-                require a running FastAPI backend and its approved local source
-                file.
+                This dashboard supports six verified NASA Giovanni MERRA-2
+                exports for The Gambia. Scientific results require a running v2
+                FastAPI backend and the selected approved local source file.
               </p>
             </section>
           )}
@@ -298,7 +404,7 @@ export default function App() {
               <Globe2 size={18} /> EarthScope AI
             </a>
             <p>Team CO2 · Earth observation for shared understanding.</p>
-            <span>Phase 2 · Frontend MVP</span>
+            <span>Six-variable research dashboard</span>
           </footer>
         </main>
       </div>

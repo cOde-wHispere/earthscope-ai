@@ -20,5 +20,5 @@
       "node"
     ]
   },
-  "include": ["src", "e2e", "*.ts"]
+  "include": ["src", "e2e", "production-e2e", "*.ts"]
 }
