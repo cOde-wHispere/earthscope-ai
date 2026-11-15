@@ -14,7 +14,7 @@ const applications = [
   {
     icon: Sprout,
     title: "Agriculture",
-    text: "Future validated rainfall, soil and vegetation datasets could help explore growing-season conditions alongside temperature. Crop-specific assessments would require local validation.",
+    text: "Historical precipitation and temperature provide environmental context. Future soil and vegetation datasets could extend research; crop-specific assessments require local validation.",
   },
   {
     icon: Siren,

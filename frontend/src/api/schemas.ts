@@ -13,7 +13,7 @@ const issue = z.object({
   line: z.number().int().nullable().optional(),
   period: z.string().nullable().optional(),
 });
-const validation = z.object({
+export const validation = z.object({
   valid: z.boolean(),
   expected_observations: count,
   observed_rows: count,

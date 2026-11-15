@@ -1,6 +1,8 @@
 import { ArrowUpRight, CircleCheck, Info, ShieldCheck } from "lucide-react";
 import type { DashboardData, Resource } from "../api/client";
 import type { Trend } from "../api/schemas";
+import type { VariableDashboard } from "../api/variables";
+import { displayUnits } from "../api/variableSchemas";
 import { monthLabel, number, pValue, signed } from "../lib/format";
 import { ErrorState } from "./States";
 
@@ -70,7 +72,7 @@ export function TrendPanel({ resource }: { resource: Resource<Trend> }) {
   );
 }
 
-export function ProvenancePanel({ data }: { data: DashboardData }) {
+export function ProvenancePanel({ data }: { data: VariableDashboard }) {
   const resource = data.metadata;
   return (
     <section
@@ -85,15 +87,17 @@ export function ProvenancePanel({ data }: { data: DashboardData }) {
           </p>
           <h2 id="provenance-title">Trace every observation</h2>
         </div>
-        <a
-          className="text-link"
-          href="https://disc.gsfc.nasa.gov/datasets/M2IMNXASM_5.12.4/summary"
-          target="_blank"
-          rel="noreferrer"
-        >
-          NASA product <ArrowUpRight size={15} />
-          <span className="sr-only"> (opens in a new tab)</span>
-        </a>
+        {resource.status === "ready" && (
+          <a
+            className="text-link"
+            href={`https://disc.gsfc.nasa.gov/datasets/${resource.data.identity.collection}_5.12.4/summary`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            NASA product <ArrowUpRight size={15} />
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        )}
       </div>
       {resource.status === "error" ? (
         <ErrorState
@@ -106,7 +110,10 @@ export function ProvenancePanel({ data }: { data: DashboardData }) {
             <div className="source-monogram">NASA</div>
             <div>
               <strong>NASA GES DISC / Giovanni</strong>
-              <p>{resource.data.product} · Historical local export</p>
+              <p>
+                {resource.data.identity.collection} v
+                {resource.data.identity.version} · Historical local export
+              </p>
             </div>
             <span className="badge">
               <CircleCheck size={13} /> Source validated
@@ -115,11 +122,13 @@ export function ProvenancePanel({ data }: { data: DashboardData }) {
           <dl className="metadata-grid">
             <div>
               <dt>Variable</dt>
-              <dd>{resource.data.variable}</dd>
+              <dd>
+                {resource.data.variable} ({resource.data.label})
+              </dd>
             </div>
             <div>
               <dt>Geographic support</dt>
-              <dd>{resource.data.region}</dd>
+              <dd>{resource.data.identity.region}</dd>
             </div>
             <div>
               <dt>Validated coverage</dt>
@@ -140,7 +149,9 @@ export function ProvenancePanel({ data }: { data: DashboardData }) {
             <div>
               <dt>Units & conversion</dt>
               <dd>
-                {resource.data.native_units} → °C · {resource.data.conversion}
+                Exported {resource.data.exported_units} →{" "}
+                {displayUnits(resource.data.monthly_units)} ·{" "}
+                {resource.data.conversion}
               </dd>
             </div>
             <div>
@@ -148,7 +159,13 @@ export function ProvenancePanel({ data }: { data: DashboardData }) {
               <dd>Unknown in this export</dd>
             </div>
           </dl>
+          <p className="panel-note">
+            Annual aggregation: {resource.data.annual_method} (
+            {displayUnits(resource.data.annual_units)}).
+          </p>
           <div className="hash-block">
+            <span>Dataset ID</span>
+            <code>{resource.data.dataset_id}</code>
             <span>Source SHA-256</span>
             <code>{resource.data.source_sha256}</code>
             <p>
@@ -173,6 +190,10 @@ export function ProvenancePanel({ data }: { data: DashboardData }) {
               <dd>{resource.data.source_name}</dd>
               <dt>Units basis</dt>
               <dd>{resource.data.units_basis}</dd>
+              <dt>NASA product native units</dt>
+              <dd>{resource.data.product_native_units}</dd>
+              <dt>Validation screen</dt>
+              <dd>{resource.data.validation_screen}</dd>
               <dt>Value column</dt>
               <dd>{resource.data.value_column}</dd>
               <dt>Fill value (rejected)</dt>
@@ -191,10 +212,79 @@ export function ProvenancePanel({ data }: { data: DashboardData }) {
               ))}
             </dl>
             <pre>{resource.data.raw_preamble}</pre>
+            <pre>{JSON.stringify(resource.data.identity, null, 2)}</pre>
             <pre>{JSON.stringify(resource.data.validation, null, 2)}</pre>
+          </details>
+          <details className="source-details">
+            <summary>Source limitations</summary>
+            <ul>
+              {resource.data.limitations.map((text) => (
+                <li key={text}>{text}</li>
+              ))}
+            </ul>
           </details>
         </>
       )}
+    </section>
+  );
+}
+
+export function DescriptiveMethodology({ data }: { data: VariableDashboard }) {
+  return (
+    <section
+      className="panel methodology-panel"
+      id="methodology"
+      aria-labelledby="methods-title"
+    >
+      <p className="eyebrow">Read the evidence responsibly</p>
+      <h2 id="methods-title">Methodology & limitations</h2>
+      <div className="method-grid">
+        <div>
+          <h3>From export to evidence</h3>
+          <p>
+            The backend verifies the approved file identity, SHA-256, country
+            shape, coverage, duplicates, gaps, fill values and finite values.
+            Invalid records block output; no interpolation is used.
+          </p>
+          {data.metadata.status === "ready" && (
+            <>
+              <h3>Units & annual aggregation</h3>
+              <p>{data.metadata.data.units_basis}</p>
+              <p>{data.metadata.data.conversion}</p>
+              <p>
+                {data.metadata.data.annual_method} (
+                {displayUnits(data.metadata.data.annual_units)}). Every annual
+                value requires 12 complete months.
+              </p>
+            </>
+          )}
+          <p>
+            This view provides descriptive monthly values and annual aggregates.
+            Additional statistical analysis requires separate scientific
+            approval.
+          </p>
+        </div>
+        <div className="limits-column">
+          <h3>What this record can tell us</h3>
+          <p>
+            MERRA-2 combines a physical model and assimilated observations.
+            Monthly country averages can obscure local conditions, particularly
+            for a country narrow relative to the native grid.
+          </p>
+          {data.metadata.status === "ready" && (
+            <ul>
+              {data.metadata.data.limitations.map((text) => (
+                <li key={text}>{text}</li>
+              ))}
+            </ul>
+          )}
+          <p>
+            Historical context does not establish causation or forecast future
+            conditions. Operational aviation, marine and safety decisions
+            require certified services.
+          </p>
+        </div>
+      </div>
     </section>
   );
 }

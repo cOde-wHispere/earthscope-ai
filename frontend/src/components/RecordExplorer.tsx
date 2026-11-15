@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { ChartNoAxesCombined, SlidersHorizontal } from "lucide-react";
-import type { Annual, Climatology, Monthly } from "../api/schemas";
+import type { Climatology, Monthly } from "../api/schemas";
 import type { Resource } from "../api/client";
+import type { VariableDashboard } from "../api/variables";
+import { displayUnits } from "../api/variableSchemas";
 import { monthLabel, monthName } from "../lib/format";
 import { Chart } from "./Chart";
 import { ErrorState } from "./States";
@@ -33,13 +35,22 @@ function Segmented<T extends string>({
   );
 }
 
-export function RecordExplorer({
-  monthly,
-  annual,
-}: {
-  monthly: Resource<Monthly>;
-  annual: Resource<Annual>;
-}) {
+export function RecordExplorer({ data }: { data: VariableDashboard }) {
+  const { monthly, annual, item, temperature } = data;
+  const isTemperature = item.id === "T2M";
+  const references = new Map(
+    temperature?.monthly.status === "ready"
+      ? temperature.monthly.data.observations.map((point) => [
+          point.time,
+          point.climatology_celsius,
+        ])
+      : [],
+  );
+  const hasReference =
+    isTemperature &&
+    monthly.status === "ready" &&
+    monthly.data.observations.length > 0 &&
+    monthly.data.observations.every((point) => references.has(point.time));
   const [frequency, setFrequency] = useState<"monthly" | "annual">("monthly");
   const [start, setStart] = useState("all");
   const [end, setEnd] = useState("all");
@@ -64,8 +75,8 @@ export function RecordExplorer({
             .map((p) => ({
               label: monthLabel(p.time),
               shortLabel: p.time.slice(0, 4),
-              value: p.temperature_celsius,
-              reference: p.climatology_celsius,
+              value: p.value,
+              reference: hasReference ? references.get(p.time) : undefined,
             }))
         : []
       : annual.status === "ready"
@@ -74,7 +85,7 @@ export function RecordExplorer({
             .map((p) => ({
               label: String(p.year),
               shortLabel: String(p.year),
-              value: p.mean_celsius,
+              value: p.value,
             }))
         : [];
   return (
@@ -86,15 +97,15 @@ export function RecordExplorer({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">
-            <ChartNoAxesCombined size={15} /> Temperature record
+            <ChartNoAxesCombined size={15} /> {item.id} record
           </p>
           <h2 id="record-title">The long view</h2>
           <p className="muted">
-            Explore the historical 2-meter air temperature record.
+            Explore the historical {item.label.toLowerCase()} record.
           </p>
         </div>
         <Segmented
-          label="Temperature frequency"
+          label="Record frequency"
           value={frequency}
           onChange={setFrequency}
           options={[
@@ -107,9 +118,13 @@ export function RecordExplorer({
         <div className="legend">
           <span>
             <i className="swatch temperature" />
-            {frequency === "monthly" ? "Monthly temperature" : "Annual mean"}
+            {frequency === "monthly"
+              ? item.label
+              : item.id === "PRECTOTCORR"
+                ? "Annual total"
+                : "Annual mean"}
           </span>
-          {frequency === "monthly" && (
+          {frequency === "monthly" && hasReference && (
             <span>
               <i className="swatch baseline" />
               Full-record climatology
@@ -172,24 +187,37 @@ export function RecordExplorer({
           key={`${frequency}-${start}-${end}`}
           title={
             frequency === "monthly"
-              ? "Monthly air temperature"
-              : "Annual air temperature"
+              ? isTemperature
+                ? "Monthly air temperature"
+                : `Monthly ${item.label.toLowerCase()}`
+              : isTemperature
+                ? "Annual air temperature"
+                : `Annual ${item.label.toLowerCase()}`
           }
           description={
             frequency === "monthly"
-              ? "Monthly air temperature and the backend full-record month-of-year climatology."
-              : "Annual air temperature means returned by the backend."
+              ? `Monthly ${item.label.toLowerCase()} returned by the backend.${hasReference ? " Includes the approved full-record month-of-year climatology." : ""}`
+              : `Annual ${item.label.toLowerCase()} returned by the backend.`
           }
           points={points}
-          referenceLabel={frequency === "monthly" ? "Climatology" : undefined}
+          referenceLabel={
+            frequency === "monthly" && hasReference ? "Climatology" : undefined
+          }
+          unit={displayUnits(
+            frequency === "monthly" ? item.monthly_units : item.annual_units,
+          )}
+          valueLabel={isTemperature ? "Temperature" : item.label}
+          signedValues={item.id === "U10M" || item.id === "V10M"}
         />
       )}
       <p className="panel-note">
         {frequency === "annual" && annual.status === "ready"
           ? `${annual.data.method}. `
           : ""}
-        Chart filters change this view only. The trend and climatology baseline
-        use the full validated record.
+        Chart filters change this view only.{" "}
+        {isTemperature
+          ? "The trend and climatology baseline use the full validated record."
+          : "Values and complete-year aggregates are supplied by the scientific backend."}
       </p>
     </section>
   );

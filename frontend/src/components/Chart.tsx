@@ -17,12 +17,18 @@ export function Chart({
   description,
   referenceLabel,
   bars = false,
+  unit = "°C",
+  valueLabel = bars ? "Anomaly" : "Temperature",
+  signedValues = false,
 }: {
   points: ChartPoint[];
   title: string;
   description: string;
   referenceLabel?: string;
   bars?: boolean;
+  unit?: string;
+  valueLabel?: string;
+  signedValues?: boolean;
 }) {
   const id = useId();
   const [selected, setSelected] = useState<number | null>(null);
@@ -32,12 +38,23 @@ export function Chart({
   const values = points.flatMap((p) =>
     p.reference === undefined ? [p.value] : [p.value, p.reference],
   );
-  const min = Math.min(...values, ...(bars ? [0] : []));
-  const max = Math.max(...values, ...(bars ? [0] : []));
+  const min = Math.min(...values, ...(bars || signedValues ? [0] : []));
+  const max = Math.max(...values, ...(bars || signedValues ? [0] : []));
+  const formatted = (value: number, digits = 2) =>
+    `${signedValues && value > 0 ? "+" : ""}${number(value, digits)}`;
   const pad = (max - min || 1) * 0.15;
   const low = min - pad;
   const high = max + pad;
-  const left = 58,
+  const ticks = Array.from(
+    { length: 5 },
+    (_, i) => low + (i * (high - low)) / 4,
+  );
+  // Grouped precipitation and pressure labels need more room than temperature.
+  // Reserve space for the formatted text inside the SVG's scrollable viewport.
+  const left = Math.max(
+      58,
+      ...ticks.map((tick) => formatted(tick, 1).length * 10 + 12),
+    ),
     right = 864,
     top = 18,
     bottom = 224;
@@ -52,10 +69,6 @@ export function Chart({
           `${i ? "L" : "M"}${x(i)},${y(reference ? (p.reference ?? p.value) : p.value)}`,
       )
       .join(" ");
-  const ticks = Array.from(
-    { length: 5 },
-    (_, i) => low + (i * (high - low)) / 4,
-  );
   const tickIndices = [
     ...new Set([
       0,
@@ -69,11 +82,11 @@ export function Chart({
       <div className="chart-readout" aria-live="polite">
         <span>{point.label}</span>
         <strong>
-          {number(point.value)} <small>°C</small>
+          {formatted(point.value)} <small>{unit}</small>
         </strong>
         {referenceLabel && point.reference !== undefined && (
           <span>
-            {referenceLabel}: {number(point.reference)} °C
+            {referenceLabel}: {number(point.reference)} {unit}
           </span>
         )}
       </div>
@@ -123,14 +136,14 @@ export function Chart({
                 y={y(tick) + 4}
                 textAnchor="end"
               >
-                {number(tick, 1)}
+                {formatted(tick, 1)}
               </text>
             </g>
           ))}
-          <text className="axis-label" x="14" y="13">
-            °C
+          <text className="axis-label" x={left} y="12">
+            {unit}
           </text>
-          {bars && (
+          {(bars || signedValues) && (
             <line
               className="zero-line"
               x1={left}
@@ -195,7 +208,7 @@ export function Chart({
           max={points.length - 1}
           value={index}
           onChange={(event) => setSelected(Number(event.target.value))}
-          aria-valuetext={`${point.label}, ${number(point.value)} degrees Celsius`}
+          aria-valuetext={`${point.label}, ${formatted(point.value)} ${unit === "°C" ? "degrees Celsius" : unit}`}
         />
       </label>
       <details className="data-details">
@@ -216,16 +229,20 @@ export function Chart({
               <tr>
                 <th scope="col">Period</th>
                 <th scope="col">
-                  {bars ? "Anomaly (°C)" : "Temperature (°C)"}
+                  {valueLabel} ({unit})
                 </th>
-                {referenceLabel && <th scope="col">{referenceLabel} (°C)</th>}
+                {referenceLabel && (
+                  <th scope="col">
+                    {referenceLabel} ({unit})
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
               {points.map((p, i) => (
                 <tr key={`${p.label}-${i}`}>
                   <th scope="row">{p.label}</th>
-                  <td>{number(p.value, 4)}</td>
+                  <td>{formatted(p.value, 4)}</td>
                   {referenceLabel && (
                     <td>
                       {p.reference === undefined ? "—" : number(p.reference, 4)}

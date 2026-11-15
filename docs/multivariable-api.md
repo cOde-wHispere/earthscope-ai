@@ -3,7 +3,8 @@
 The six approved local Giovanni exports cover The Gambia, January 1991 through
 December 2025. Each contains 420 monthly area averages and 35 complete years.
 The existing temperature API, identity manifest, importer, calculations, inference
-and JSON schemas are preserved. The merged frontend continues to use that API.
+and JSON schemas are preserved. Mission 18 adds the six-variable frontend described
+in the [frontend guide](../frontend/README.md) and [review report](mission18-review.md).
 
 `/v2` is additive. It exposes discovery, provenance and descriptive monthly/annual
 series. It does not expose trends, significance tests, confidence intervals,
@@ -146,9 +147,10 @@ meaning and JSON schema. Operators must inspect `/v2/datasets` for six-dataset
 readiness; `/health: ok` does not imply all additional datasets are ready.
 
 The existing `/metadata`, `/timeseries/monthly`, `/timeseries/annual`, `/climatology`
-and `/trend` contracts remain unchanged. Existing frontend source, configuration,
-dependencies and lockfile are preserved. It continues to display temperature;
-multi-variable frontend controls require a separate reviewed phase.
+and `/trend` contracts remain unchanged. Mission 17 preserved frontend source,
+configuration, dependencies and lockfile. Mission 18 uses v2 for the selected
+descriptive record and retains approved legacy analysis only for T2M. Backend
+contracts and scientific methods remain unchanged.
 
 ## Deployment requirements
 
