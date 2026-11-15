@@ -13,8 +13,8 @@ and methodology. Approved temperature trend and anomaly analysis is preserved;
 additional variables provide descriptive values only. Live NASA retrieval,
 forecasting and operational sector advice are not implemented.
 
-Mission 18 is uncommitted local work awaiting Technical Lead review. Nothing has
-been pushed, merged or deployed.
+The six-variable frontend is implemented, reviewed and locally verified.
+Production hosting and public deployment remain pending.
 
 - [Frontend setup and deployment dependencies](frontend/README.md)
 - [Mission 18 exact verification results and working state](docs/mission18-review.md)
